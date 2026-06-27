@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# Local Claude Code config (machine-specific)
+.claude/
+
+# Throwaway build entry written by scripts/run-demo.mjs (deleted after each build)
+/index.html
