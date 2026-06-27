@@ -1,0 +1,17 @@
+# Each line is a Coxeter word: generator indices applied LEFT TO RIGHT
+# (0 first). Integers separated by spaces or commas. "#" comments and blank
+# lines are ignored; "e" is the identity (the fundamental domain itself).
+# Words using a generator the current group doesn't have are skipped.
+
+e
+0
+1
+2
+0 1
+1 0
+0 2
+2 1
+0 1 0
+1 0 1
+0 2 1
+2 1 0 1 2 0 1 2 1 2 1 0

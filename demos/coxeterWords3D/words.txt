@@ -1,0 +1,16 @@
+# 3D Coxeter words: generator indices applied LEFT TO RIGHT (0 first).
+# Integers separated by spaces or commas; "#" comments and blank lines ignored;
+# "e" is the identity (the fundamental cell). Words using a generator the current
+# group lacks are skipped — these use 0–3, valid for tetrahedra and the dodecahedron.
+
+e
+0
+1
+2
+3
+0 1
+0 2
+0 3
+1 0
+2 1 0
+0 1 2 3

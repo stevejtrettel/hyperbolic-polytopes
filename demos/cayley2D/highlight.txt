@@ -1,0 +1,6 @@
+# Each line is a word; its group element is highlighted in the Cayley graph.
+# Words: space-separated generator indices. "#" comments / blank lines ignored.
+# Edit and Vite hot-reloads.
+
+0
+1

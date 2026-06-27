@@ -1,0 +1,5 @@
+# Each line is a word; its group element is highlighted in the Cayley graph.
+# Use generators 0–3 (valid for the tetrahedra and the dodecahedron).
+
+0
+1
