@@ -10,7 +10,8 @@ import type { Vec } from '../math/hyperboloid';
 import { orbit as runOrbit, matrixKey, type OrbitElement } from '../group/orbit';
 import { CoxeterPolytope } from './CoxeterPolytope';
 import type { CayleyGraph, CayleyNode, CayleyEdge } from './CayleyGraph';
-import { realize } from './realize';
+import { realize, type Realization } from './realize';
+import { canonicalPolygonRealization } from './canonicalPolygon';
 
 /**
  * A hyperbolic geometry that also exposes its isometry group: the full
@@ -47,18 +48,22 @@ export class CoxeterGroup<P extends Vec<P>, I> {
 
   private readonly makeDomain: () => Polytope<P>;
   private domain?: Polytope<P>;
+  /** A chamber-interior point on the hyperboloid (hull-independent; see basePoint). */
+  private readonly interior: P;
 
   constructor(
     geom: GroupGeometry<P, I>,
     mirrors: Hyperplane<P>[],
     reflections: I[],
     signature: { pos: number; neg: number; zero: number },
+    interior: P,
     makeDomain: () => Polytope<P>,
   ) {
     this.geom = geom;
     this.mirrors = mirrors;
     this.reflections = reflections;
     this.signature = signature;
+    this.interior = geom.normalize(interior);
     this.makeDomain = makeDomain;
   }
 
@@ -89,17 +94,16 @@ export class CoxeterGroup<P extends Vec<P>, I> {
   }
 
   /**
-   * A generic interior point of the fundamental domain — the centroid of its
-   * vertices. Every non-identity element of W moves it (W acts freely on chamber
-   * interiors), so its orbit bijects with W: it's the right base point for the
-   * Cayley graph. (A point on a wall would have a nontrivial stabilizer and give
-   * a uniform polytope instead — Wythoff's construction.)
+   * A generic interior point of the fundamental chamber — the point equidistant
+   * from the walls (⟨p, n_i⟩ all equal), straight from the realization. Every
+   * non-identity element of W moves it (W acts freely on chamber interiors), so
+   * its orbit bijects with W: it's the right base point for the Cayley graph. (A
+   * point on a wall would have a nontrivial stabilizer and give a uniform polytope
+   * instead — Wythoff's construction.) Hull-independent, so it stays valid for
+   * non-compact chambers where the fundamental-domain hull is incomplete.
    */
   basePoint(): P {
-    const verts = this.fundamentalDomain().vertices;
-    const sum = verts[0].clone().multiplyScalar(0);
-    for (const v of verts) sum.addScaledVector(v, 1);
-    return this.geom.normalize(sum);
+    return this.interior.clone();
   }
 
   /**
@@ -205,24 +209,55 @@ export class CoxeterGroup<P extends Vec<P>, I> {
   }
 }
 
-/** Realize a rank-3 (signature (2,1)) Coxeter Gram matrix as a group acting on H². */
-export function buildCoxeterGroup2(gram: number[][]): CoxeterGroup<Vector3, Matrix3> {
-  const r = realize(gram);
-  if (r.dim !== 2) throw new Error(`buildCoxeterGroup2 expects an H² (rank-3) Gram matrix; got H${r.dim}.`);
+/**
+ * Assemble an H² Coxeter group from a `Realization` (normals + interior, already
+ * in standard R^{2,1}). Shared by both the Gram path (`buildCoxeterGroup2`) and
+ * the Porti canonical-polygon path (`buildCanonicalCoxeterGroup2`), so neither
+ * re-diagonalizes a Gram it has already realized.
+ */
+function realization2ToGroup(r: Realization): CoxeterGroup<Vector3, Matrix3> {
+  if (r.dim !== 2) throw new Error(`expected an H² (rank-3) realization; got H${r.dim}.`);
   const geom = new Hyperbolic2(-1);
   const form = (a: Vector3, b: Vector3) => geom.form(a, b);
   const mirrors = r.normals.map((c) => Hyperplane.fromNormal(form, new Vector3(c[0], c[1], c[2])));
   const reflections = mirrors.map((m) => geom.reflection(m.normal));
-  return new CoxeterGroup(geom, mirrors, reflections, r.signature, () => fromHalfspaces2(geom, mirrors));
+  const interior = new Vector3(r.interior[0], r.interior[1], r.interior[2]);
+  return new CoxeterGroup(geom, mirrors, reflections, r.signature, interior, () => fromHalfspaces2(geom, mirrors));
 }
 
-/** Realize a rank-4 (signature (3,1)) Coxeter Gram matrix as a group acting on H³. */
-export function buildCoxeterGroup3(gram: number[][]): CoxeterGroup<Vector4, Matrix4> {
-  const r = realize(gram);
-  if (r.dim !== 3) throw new Error(`buildCoxeterGroup3 expects an H³ (rank-4) Gram matrix; got H${r.dim}.`);
+/** Realize a rank-3 (signature (2,1)) Coxeter Gram matrix as a group acting on H². */
+export function buildCoxeterGroup2(gram: number[][]): CoxeterGroup<Vector3, Matrix3> {
+  return realization2ToGroup(realize(gram));
+}
+
+/**
+ * Build an H² Coxeter group directly from a cyclic list of adjacent orders
+ * m_i = ord(s_i s_{i+1}), via Porti's canonical minimum-perimeter polygon (see
+ * canonicalPolygon.ts). This is the user-friendly path for n-gons: it supplies
+ * the ultraparallel distances the bare Coxeter data leaves undetermined, with no
+ * hand-derived Gram and no diagonalization round-trip.
+ */
+export function buildCanonicalCoxeterGroup2(adjacentOrders: readonly number[]): CoxeterGroup<Vector3, Matrix3> {
+  return realization2ToGroup(canonicalPolygonRealization(adjacentOrders));
+}
+
+/**
+ * Assemble an H³ Coxeter group from a `Realization` (normals + interior in
+ * standard R^{3,1}). Shared by the Gram path (`buildCoxeterGroup3`) and the
+ * polyhedron-solver path (see coxeter/polyhedron), so a solved set of normals
+ * feeds the group without a Gram round-trip.
+ */
+export function realization3ToGroup(r: Realization): CoxeterGroup<Vector4, Matrix4> {
+  if (r.dim !== 3) throw new Error(`expected an H³ (rank-4) realization; got H${r.dim}.`);
   const geom = new Hyperbolic3(-1);
   const form = (a: Vector4, b: Vector4) => geom.form(a, b);
   const mirrors = r.normals.map((c) => Hyperplane.fromNormal(form, new Vector4(c[0], c[1], c[2], c[3])));
   const reflections = mirrors.map((m) => geom.reflection(m.normal));
-  return new CoxeterGroup(geom, mirrors, reflections, r.signature, () => fromHalfspaces3(geom, mirrors));
+  const interior = new Vector4(r.interior[0], r.interior[1], r.interior[2], r.interior[3]);
+  return new CoxeterGroup(geom, mirrors, reflections, r.signature, interior, () => fromHalfspaces3(geom, mirrors));
+}
+
+/** Realize a rank-4 (signature (3,1)) Coxeter Gram matrix as a group acting on H³. */
+export function buildCoxeterGroup3(gram: number[][]): CoxeterGroup<Vector4, Matrix4> {
+  return realization3ToGroup(realize(gram));
 }

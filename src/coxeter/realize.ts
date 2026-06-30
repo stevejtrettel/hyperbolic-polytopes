@@ -1,4 +1,5 @@
 import { symmetricEig } from '../math/symmetricEig';
+import { solveLinear } from '../math/linearSolve';
 
 /**
  * From a Coxeter Gram matrix to a geometric realization on the standard
@@ -40,6 +41,13 @@ export interface Realization {
   signature: { pos: number; neg: number; zero: number };
   /** N unit spacelike normals in standard R^{n,1}, coordinate 0 timelike. Each has length dim+1. */
   normals: number[][];
+  /**
+   * A point strictly inside the fundamental chamber, in standard R^{n,1} (length
+   * dim+1, future-pointing). Hull-independent, so it is well-defined even when the
+   * chamber is non-compact (ideal/hyperideal vertices) and the hull is incomplete.
+   * Normalize onto the hyperboloid to get the Cayley-graph base point.
+   */
+  interior: number[];
 }
 
 /** Diagonalize the Gram matrix into standard-form normals; throws on a non-hyperbolic signature. */
@@ -78,17 +86,22 @@ export function realize(gram: number[][]): Realization {
   // if it is past-pointing, apply the time reversal diag(-1, 1, …) — which negates
   // coordinate 0 of every normal and preserves the Gram matrix.
   const interior = interiorPoint(normals, dim + 1);
-  if (interior[0] < 0) for (const n of normals) n[0] = -n[0];
+  if (interior[0] < 0) {
+    for (const n of normals) n[0] = -n[0];
+    interior[0] = -interior[0]; // keep the interior point in step with the flipped normals
+  }
 
-  return { dim, signature: { pos: pos.length, neg: neg.length, zero: zero.length }, normals };
+  return { dim, signature: { pos: pos.length, neg: neg.length, zero: zero.length }, normals, interior };
 }
 
 /**
  * A point p in the chamber { ⟨x, n_i⟩ ≤ 0 } as the least-squares solution of
  * ⟨p, n_i⟩ = -1 (i.e. p·(J n_i) = -1). With A the matrix of rows J n_i, solve the
  * normal equations (AᵀA) p = Aᵀ(-1). The normals span R^{d}, so AᵀA is invertible.
+ * Returns the raw solution (not oriented onto a sheet); callers flip the time
+ * component if they need it future-pointing. Shared with the 3D solver.
  */
-function interiorPoint(normals: number[][], d: number): number[] {
+export function interiorPoint(normals: number[][], d: number): number[] {
   const A = normals.map((n) => n.map((c, a) => (a === 0 ? -c : c))); // rows J·n_i
   const AtA: number[][] = Array.from({ length: d }, () => new Array(d).fill(0));
   const Atb = new Array(d).fill(0);
@@ -99,21 +112,4 @@ function interiorPoint(normals: number[][], d: number): number[] {
     }
   }
   return solveLinear(AtA, Atb);
-}
-
-/** Solve M x = b for small dense M by Gaussian elimination with partial pivoting. */
-function solveLinear(M: number[][], b: number[]): number[] {
-  const n = b.length;
-  const a = M.map((row, i) => [...row, b[i]]);
-  for (let col = 0; col < n; col++) {
-    let piv = col;
-    for (let r = col + 1; r < n; r++) if (Math.abs(a[r][col]) > Math.abs(a[piv][col])) piv = r;
-    [a[col], a[piv]] = [a[piv], a[col]];
-    for (let r = 0; r < n; r++) {
-      if (r === col) continue;
-      const f = a[r][col] / a[col][col];
-      for (let c = col; c <= n; c++) a[r][c] -= f * a[col][c];
-    }
-  }
-  return a.map((row, i) => row[n] / row[i]); // diagonal now: x_i = rhs_i / pivot_i
 }
