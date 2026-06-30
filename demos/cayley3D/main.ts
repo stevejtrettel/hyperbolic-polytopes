@@ -4,6 +4,11 @@
 // coloured by generator. The 3D analogue of cayley2D — orbit it inside the ball.
 // (Word-length radius is kept modest: the 3D groups branch fast.)
 //
+// The list mixes COMPACT Coxeter tetrahedra and the right-angled dodecahedron
+// with NON-COMPACT tetrahedra (an ∞ / order-6 edge gives an ideal vertex). The
+// Cayley graph only needs the reflections and a chamber-interior base point —
+// both well-defined for the non-compact groups — so they draw fine.
+//
 //   npm run dev cayley3D
 
 import GUI from 'lil-gui';
@@ -15,15 +20,19 @@ import { UpperHalfSpace } from '../../src/models/UpperHalfSpace';
 import { pathGram, rightAngledDodecahedronGram } from '../../src/coxeter/gram';
 import { buildCoxeterGroup3 } from '../../src/coxeter/CoxeterGroup';
 import { CayleyGraphView } from '../../src/coxeter/CayleyGraphView';
-import { parseWords } from '../../src/coxeter/words';
-import { matrixKey } from '../../src/group/orbit';
-import highlightText from './highlight.txt?raw';
 
 const geom = new Hyperbolic3(-1);
 
+// pathGram([a,b,c]) is the Coxeter tetrahedron with a linear diagram (consecutive
+// dihedral angles π/a, π/b, π/c; non-consecutive walls perpendicular). [3,5,3],
+// [4,3,5], [5,3,5] are compact; a 6 or ∞ edge introduces an ideal vertex, so
+// [3,3,6] / [4,3,6] are non-compact.
 const GROUPS: Record<string, () => ReturnType<typeof buildCoxeterGroup3>> = {
   'Tetrahedron [3,5,3]': () => buildCoxeterGroup3(pathGram([3, 5, 3])),
   'Tetrahedron [4,3,5]': () => buildCoxeterGroup3(pathGram([4, 3, 5])),
+  'Tetrahedron [5,3,5]': () => buildCoxeterGroup3(pathGram([5, 3, 5])),
+  'Tetrahedron [3,3,6] (ideal)': () => buildCoxeterGroup3(pathGram([3, 3, 6])),
+  'Tetrahedron [4,3,6] (ideal)': () => buildCoxeterGroup3(pathGram([4, 3, 6])),
   'Right-angled dodecahedron': () => buildCoxeterGroup3(rightAngledDodecahedronGram()),
 };
 
@@ -33,30 +42,29 @@ const MODELS = {
   'Upper half-space': new UpperHalfSpace(geom),
 };
 
-const viewer = new Viewer();
-const state = { polytope: 'Tetrahedron [3,5,3]', model: 'Poincaré ball', radius: 9, highlight: false };
+// Each node/edge is its own mesh, so the node count is the cost. This bounds the
+// breadth-first enumeration so a high radius on a fast-branching group (the
+// dodecahedron especially) degrades to a truncated ball instead of freezing the
+// page. Raise it if your machine is happy with more.
+const MAX_NODES = 6000;
 
-/** The element keys to highlight: the element of each word in highlight.txt. */
-function highlightSet(group: ReturnType<typeof buildCoxeterGroup3>): Set<string> | undefined {
-  if (!state.highlight) return undefined;
-  return new Set(parseWords(highlightText, group.rank).map((w) => matrixKey(group.word(w))));
-}
+const viewer = new Viewer();
+const state = { group: 'Tetrahedron [3,5,3]', model: 'Poincaré ball', radius: 8 };
 
 function rebuild(): void {
-  const group = GROUPS[state.polytope]();
+  const group = GROUPS[state.group]();
   const model = MODELS[state.model as keyof typeof MODELS];
   const t0 = performance.now();
-  const graph = group.cayleyGraph(state.radius, 50000); // safety bound only; raise if you want even more
+  const graph = group.cayleyGraph(state.radius, MAX_NODES);
   viewer.display(
-    new CayleyGraphView(graph, group.geom, model, group.basePoint(), { nodeRadius: 0.012, edgeWidth: 0.008, highlight: highlightSet(group) }),
+    new CayleyGraphView(graph, group.geom, model, group.basePoint(), { nodeRadius: 0.012, edgeWidth: 0.008 }),
     model,
   );
   console.log(`Cayley graph: ${graph.nodes.length} nodes, ${graph.edges.length} edges in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 const gui = new GUI({ title: 'Cayley graph (H³)' });
-gui.add(state, 'polytope', Object.keys(GROUPS)).onChange(rebuild);
+gui.add(state, 'group', Object.keys(GROUPS)).onChange(rebuild);
 gui.add(state, 'model', Object.keys(MODELS)).onChange(rebuild);
 gui.add(state, 'radius', 0, 15, 1).name('word-length radius').onChange(rebuild);
-gui.add(state, 'highlight').name('highlight (highlight.txt)').onChange(rebuild);
 rebuild();
