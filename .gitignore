@@ -8,3 +8,8 @@ dist/
 
 # Throwaway build entry written by scripts/run-demo.mjs (deleted after each build)
 /index.html
+
+# GitHub Pages build (scripts/build-all.mjs)
+dist-pages
+demos/*/index.html
+demos/__pages
