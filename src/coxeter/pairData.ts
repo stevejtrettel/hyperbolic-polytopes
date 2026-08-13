@@ -68,3 +68,77 @@ export function pairOrder(data: CoxeterPairData, a: GeneratorId, b: GeneratorId)
   }
   return 2;
 }
+
+/**
+ * `CoxeterPairData` (complete pair orders) is the canonical data. A DIAGRAM is a
+ * drawing of it, and Coxeter / Artin are two VIEWS of the same data, differing
+ * only in which edges they HIDE:
+ *  - 'coxeter' hides the order-2 edges — the Coxeter–Dynkin diagram, where an
+ *    undrawn pair is perpendicular. Natural when most generators commute.
+ *  - 'artin'   hides the order-∞ edges — where an undrawn pair is ultraparallel
+ *    (no relation). Natural for hyperbolic polytopes: an n-gon is a cycle of edges.
+ * The data is primary; a view is just a rendering. `drawnEdges` projects complete
+ * data to the edges a view shows; `diagramToPairData` is the inverse, completing a
+ * drawing back to full data (undrawn pairs = the view's hidden order). A drawn
+ * edge always carries its explicit order.
+ */
+export type DiagramView = 'coxeter' | 'artin';
+
+/** The order a view hides — hence the value an undrawn pair takes. */
+export function hiddenOrder(view: DiagramView): CoxeterOrder {
+  return view === 'coxeter' ? 2 : 'infinity';
+}
+
+/** A drawn edge of a Coxeter diagram, with its explicit order. */
+export interface DiagramEdge {
+  readonly a: GeneratorId;
+  readonly b: GeneratorId;
+  readonly order: CoxeterOrder;
+}
+
+/** A diagram: the drawn (visible) edges, interpreted in a view. */
+export interface CoxeterDiagram {
+  readonly generators: readonly GeneratorId[];
+  readonly edges: readonly DiagramEdge[];
+  readonly view: DiagramView;
+}
+
+/**
+ * Complete the data from a diagram drawn in a view: each drawn edge keeps its
+ * order; every other pair takes the view's hidden order. Inverse of `drawnEdges`.
+ */
+export function diagramToPairData(diagram: CoxeterDiagram): CoxeterPairData {
+  const { generators: gens, edges, view } = diagram;
+  if (new Set(gens).size !== gens.length) throw new Error('generator identifiers must be distinct.');
+  const known = new Set(gens);
+  const omitted = hiddenOrder(view);
+
+  // Drawn edges, keyed by canonical unordered pair "a|b" with index(a) < index(b).
+  const index = new Map(gens.map((g, i) => [g, i]));
+  const drawn = new Map<string, CoxeterOrder>();
+  for (const e of edges) {
+    if (!known.has(e.a) || !known.has(e.b)) throw new Error(`edge references unknown generator: ${e.a}–${e.b}.`);
+    if (e.a === e.b) throw new Error(`edge connects a generator to itself: ${e.a}.`);
+    const m = e.order;
+    if (!(m === 'infinity' || (Number.isInteger(m) && m >= 2))) throw new Error(`invalid edge order ${m} on ${e.a}–${e.b}.`);
+    const [lo, hi] = index.get(e.a)! < index.get(e.b)! ? [e.a, e.b] : [e.b, e.a];
+    drawn.set(`${lo}|${hi}`, m);
+  }
+
+  const relations: PairRelation[] = [];
+  for (let i = 0; i < gens.length; i++) {
+    for (let j = i + 1; j < gens.length; j++) {
+      relations.push({ a: gens[i], b: gens[j], order: drawn.get(`${gens[i]}|${gens[j]}`) ?? omitted });
+    }
+  }
+  return { generators: [...gens], relations };
+}
+
+/**
+ * The edges a view draws for complete data: the pairs whose order isn't the
+ * view's hidden one. Inverse of `diagramToPairData` (round-trips the data).
+ */
+export function drawnEdges(data: CoxeterPairData, view: DiagramView): DiagramEdge[] {
+  const h = hiddenOrder(view);
+  return data.relations.filter((r) => r.order !== h).map((r) => ({ a: r.a, b: r.b, order: r.order }));
+}

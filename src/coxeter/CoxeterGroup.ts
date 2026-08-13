@@ -12,6 +12,8 @@ import { CoxeterPolytope } from './CoxeterPolytope';
 import type { CayleyGraph, CayleyNode, CayleyEdge } from './CayleyGraph';
 import { realize, type Realization } from './realize';
 import { canonicalPolygonRealization } from './canonicalPolygon';
+import type { CoxeterPairData } from './pairData';
+import { interpretCompactPolygon } from './polygonSpec';
 
 /**
  * A hyperbolic geometry that also exposes its isometry group: the full
@@ -239,6 +241,16 @@ export function buildCoxeterGroup2(gram: number[][]): CoxeterGroup<Vector3, Matr
  */
 export function buildCanonicalCoxeterGroup2(adjacentOrders: readonly number[]): CoxeterGroup<Vector3, Matrix3> {
   return realization2ToGroup(canonicalPolygonRealization(adjacentOrders));
+}
+
+/**
+ * The one-call bridge from abstract combinatorial data to a 2D Coxeter group:
+ * normalized pair data (from a Coxeter matrix or a diagram — see pairData) →
+ * cyclic polygon spec → canonical (Porti) realization. Throws via
+ * `interpretCompactPolygon` if the data isn't a compact hyperbolic polygon.
+ */
+export function coxeterPolygonGroup(data: CoxeterPairData): CoxeterGroup<Vector3, Matrix3> {
+  return buildCanonicalCoxeterGroup2(interpretCompactPolygon(data).orders);
 }
 
 /**
